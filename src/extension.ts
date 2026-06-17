@@ -354,7 +354,10 @@ async function syncProject() {
 	// 3. Append the source directory and destination
 	const args = [...cfg.extraOptions];
 	for (const pattern of exclude) {
-		args.push('--exclude', pattern);
+		// Escape glob metacharacters so the shell passes the pattern
+		// literally to rsync instead of trying to expand it.  Patterns
+		// like *.py[co] would otherwise cause "no matches found" in zsh.
+		args.push('--exclude', escapeShellGlob(pattern));
 	}
 	args.push(source, dest);
 
@@ -647,6 +650,21 @@ function createRsyncTask(name: string, args: string[]): vscode.Task {
 	};
 
 	return task;
+}
+
+/**
+ * Escape shell glob metacharacters so the pattern is passed literally
+ * through the shell rather than being expanded as a file glob.
+ *
+ * Shells (especially zsh) will try to expand unquoted patterns like
+ * `*.py[co]` before rsync sees them — zsh's NOMATCH option turns
+ * unmatched globs into a hard error: "no matches found".
+ *
+ * @param pattern - An rsync exclude pattern that may contain `*`, `?`, `[`, `]`
+ * @returns The pattern with glob metacharacters backslash-escaped
+ */
+function escapeShellGlob(pattern: string): string {
+	return pattern.replace(/[*?[\]]/g, '\\$&');
 }
 
 /**
