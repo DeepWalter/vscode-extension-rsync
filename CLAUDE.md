@@ -18,7 +18,7 @@ npm run vscode:prepublish  # Compile (used by vsce package/publish)
 
 ## Architecture
 
-This extension provides two rsync commands: `rsync.syncCurrentFile` (sync the active editor file) and `rsync.syncProject` (sync the entire workspace). All logic lives in [src/extension.ts](src/extension.ts).
+This extension provides three rsync commands: `rsync.syncCurrentFile` (sync the active editor file), `rsync.syncProject` (sync the entire workspace), and `rsync.config` (interactive guided setup for workspace settings). All logic lives in [src/extension.ts](src/extension.ts).
 
 ### Design: VS Code Tasks API
 
@@ -36,12 +36,14 @@ Instead of spawning `rsync` via Node.js `child_process`, the extension uses the 
 
 |Function|Purpose|
 |---|---|
-|`activate()`|Registers commands and the `onDidEndTaskProcess` listener|
+|`activate()`|Registers the task provider, commands, and the `onDidEndTaskProcess` listener|
 |`syncCurrentFile()`|Handler for syncing the active editor file|
 |`syncProject()`|Handler for syncing the entire workspace|
 |`validateConfig()`|Reads and validates required settings; returns `null` with a user notification if missing|
 |`getWorkspaceRoot()`|Returns `workspaceFolders[0].uri.fsPath` or `null` if no folder is open|
 |`createRsyncTask(name, args)`|Builds a `vscode.Task` with `ShellExecution` and `presentationOptions`|
+|`configWorkspace()`|Handler for interactive workspace configuration (`rsync.config` command)|
+|`promptAdvancedOptions(config)`|Prompts for optional rsync path, flags, and exclude patterns|
 
 ### Configuration
 
