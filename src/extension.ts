@@ -413,8 +413,6 @@ interface RsyncConfig {
 	remoteHost: string;
 	/** Destination path on the remote, e.g. "/var/www/project/" */
 	remotePath: string;
-	/** Path to the rsync binary, defaults to "rsync" */
-	rsyncPath: string;
 	/** Extra flags passed to every rsync invocation, e.g. ["-az", "--delete"] */
 	extraOptions: string[];
 }
@@ -444,7 +442,6 @@ function validateConfig(): RsyncConfig | null {
 	// `.trim()` removes leading/trailing whitespace the user may have added.
 	const remoteHost = config.get<string>('remoteHost', '').trim();
 	const remotePath = config.get<string>('remotePath', '').trim();
-	const rsyncPath = config.get<string>('rsyncPath', 'rsync').trim();
 	const extraOptions = config.get<string[]>('extraOptions', ['-az', '--delete']);
 
 	if (!remoteHost) {
@@ -460,7 +457,7 @@ function validateConfig(): RsyncConfig | null {
 		return null;
 	}
 
-	return { remoteHost, remotePath, rsyncPath, extraOptions };
+	return { remoteHost, remotePath, extraOptions };
 }
 
 /**
