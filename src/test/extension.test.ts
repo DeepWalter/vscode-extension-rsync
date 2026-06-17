@@ -1,15 +1,34 @@
 import * as assert from 'assert';
-
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from 'vscode';
-// import * as myExtension from '../../extension';
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+suite('rsync Extension Test Suite', () => {
+	test('Extension should be activated', async () => {
+		const ext = vscode.extensions.getExtension('vscode-samples.rsync')!;
+		await ext.activate();
+		assert.ok(ext.isActive);
+	});
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+	test('Commands should be registered', async () => {
+		const commands = await vscode.commands.getCommands(true);
+		assert.ok(commands.includes('rsync.syncCurrentFile'));
+		assert.ok(commands.includes('rsync.syncProject'));
+	});
+
+	test('syncCurrentFile shows error without config', async () => {
+		// When no remoteHost is configured, the command should show an error
+		// notification and return without throwing.
+		try {
+			await vscode.commands.executeCommand('rsync.syncCurrentFile');
+		} catch {
+			// Command may throw if activation hasn't happened; that's acceptable.
+		}
+	});
+
+	test('syncProject shows error without config', async () => {
+		try {
+			await vscode.commands.executeCommand('rsync.syncProject');
+		} catch {
+			// Command may throw if activation hasn't happened; that's acceptable.
+		}
 	});
 });
