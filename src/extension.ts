@@ -85,6 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
 		taskProvider,
 		vscode.commands.registerCommand('rsync.syncCurrentFile', syncCurrentFile),
 		vscode.commands.registerCommand('rsync.syncProject', syncProject),
+		vscode.commands.registerCommand('rsync.config', configWorkspace),
 	);
 }
 
@@ -219,6 +220,129 @@ async function syncProject() {
 
 	const task = createRsyncTask('Sync Project', args);
 	await vscode.tasks.executeTask(task);
+}
+
+/**
+ * `rsync.config` command handler.
+ *
+ * Interactively prompts the user for rsync settings and writes them to the
+ * workspace's `.vscode/settings.json` file. This is the setup command users
+ * run once per project to configure remote host/path before syncing.
+ *
+ * Flow:
+ * 1. Prompt for `remoteHost` (required) — pre-filled with any current value
+ * 2. Prompt for `remotePath` (required) — pre-filled with any current value
+ * 3. Ask whether to configure advanced options (rsync path, excludes, flags)
+ * 4. Write all collected values to workspace-level configuration
+ *
+ * Writes to `ConfigurationTarget.Workspace` so settings are scoped to the
+ * current workspace and don't pollute the user's global settings.
+ */
+async function configWorkspace() {
+	const config = vscode.workspace.getConfiguration('rsync');
+
+	// ---- Required: remoteHost ----
+	const curHost = config.get<string>('remoteHost', '');
+	const remoteHost = await vscode.window.showInputBox({
+		title: 'rsync: Configure Workspace',
+		prompt: 'Remote host (e.g., user@example.com)',
+		placeHolder: 'user@example.com',
+		value: curHost,
+		validateInput: (value) => {
+			if (!value.trim()) {
+				return 'Remote host is required.';
+			}
+			return undefined; // undefined means valid
+		},
+	});
+	if (remoteHost === undefined) {
+		return; // user cancelled
+	}
+
+	// ---- Required: remotePath ----
+	const curPath = config.get<string>('remotePath', '');
+	const remotePath = await vscode.window.showInputBox({
+		title: 'rsync: Configure Workspace',
+		prompt: 'Destination path on remote (e.g., /home/user/project/)',
+		placeHolder: '/home/user/project/',
+		value: curPath,
+		validateInput: (value) => {
+			if (!value.trim()) {
+				return 'Remote path is required.';
+			}
+			return undefined;
+		},
+	});
+	if (remotePath === undefined) {
+		return; // user cancelled
+	}
+
+	// Write the required settings immediately
+	await config.update('remoteHost', remoteHost.trim(), vscode.ConfigurationTarget.Workspace);
+	await config.update('remotePath', remotePath.trim(), vscode.ConfigurationTarget.Workspace);
+
+	// ---- Optional: advanced settings ----
+	const choice = await vscode.window.showQuickPick(
+		['Done', 'Configure advanced options'],
+		{ title: 'rsync: Basic settings saved. Configure advanced options?' },
+	);
+	if (choice === 'Configure advanced options') {
+		await promptAdvancedOptions(config);
+	}
+
+	vscode.window.showInformationMessage(
+		`rsync: Workspace configured — syncing to ${remoteHost.trim()}:${remotePath.trim()}`,
+	);
+}
+
+/**
+ * Prompt the user for optional advanced rsync settings and write them to
+ * workspace configuration.
+ */
+async function promptAdvancedOptions(config: vscode.WorkspaceConfiguration) {
+	// rsyncPath
+	const curRsyncPath = config.get<string>('rsyncPath', 'rsync');
+	const rsyncPath = await vscode.window.showInputBox({
+		title: 'rsync: Advanced — rsync Path',
+		prompt: 'Path to the rsync binary (default: rsync)',
+		placeHolder: 'rsync',
+		value: curRsyncPath,
+	});
+	if (rsyncPath !== undefined) {
+		await config.update('rsyncPath', rsyncPath.trim() || 'rsync', vscode.ConfigurationTarget.Workspace);
+	}
+
+	// extraOptions (comma-separated)
+	const curOptions = config.get<string[]>('extraOptions', ['-az', '--delete']).join(', ');
+	const optionsInput = await vscode.window.showInputBox({
+		title: 'rsync: Advanced — Extra Options',
+		prompt: 'Extra rsync flags (comma-separated, e.g., -az, --delete)',
+		placeHolder: '-az, --delete',
+		value: curOptions,
+	});
+	if (optionsInput !== undefined) {
+		const extraOptions = optionsInput
+			.split(',')
+			.map(s => s.trim())
+			.filter(s => s.length > 0);
+		await config.update('extraOptions', extraOptions, vscode.ConfigurationTarget.Workspace);
+	}
+
+	// exclude patterns (comma-separated)
+	const curExclude = config.get<string[]>('exclude', ['.git', 'node_modules', 'out', '.vscode-test']).join(', ');
+	const excludeInput = await vscode.window.showInputBox({
+		title: 'rsync: Advanced — Exclude Patterns',
+		prompt: 'Exclusion patterns (comma-separated, e.g., .git, node_modules)',
+		placeHolder: '.git, node_modules, out, .vscode-test',
+		value: curExclude,
+	});
+	if (excludeInput !== undefined) {
+		const exclude = excludeInput
+			.split(',')
+			.map(s => s.trim())
+			.filter(s => s.length > 0);
+		await config.update('exclude', exclude, vscode.ConfigurationTarget.Workspace);
+	}
 }
 
 // ---- Helpers ----

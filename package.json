@@ -25,6 +25,10 @@
       {
         "command": "rsync.syncProject",
         "title": "rsync: Sync Entire Project to Remote"
+      },
+      {
+        "command": "rsync.config",
+        "title": "rsync: Configure Workspace Settings"
       }
     ],
     "configuration": {
