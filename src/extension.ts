@@ -238,6 +238,15 @@ async function syncFile(document: vscode.TextDocument) {
 		return;
 	}
 
+	// Skip files that match rsync.exclude patterns.  Without this check
+	// saving a file inside node_modules/ or .venv/ would wastefully spawn
+	// an rsync process even though rsync itself would exclude it.
+	const config = vscode.workspace.getConfiguration('rsync');
+	const exclude = config.get<string[]>('exclude', []);
+	if (isExcluded(relativePath, exclude)) {
+		return;
+	}
+
 	// Extract the directory portion of the relative path so rsync places
 	// the file in the correct subdirectory on the remote.
 	const destDir = path.dirname(relativePath);
@@ -638,4 +647,130 @@ function createRsyncTask(name: string, args: string[]): vscode.Task {
 	};
 
 	return task;
+}
+
+/**
+ * Test whether a string matches a single rsync-style glob pattern.
+ *
+ * Convert glob tokens to their regex equivalents:
+ * - `**` matches anything including `/`
+ * - `*`  matches anything except `/`
+ * - `?`  matches one non-slash character
+ * - `[...]` is kept as-is (valid regex character class)
+ *
+ * @param str     - The string to test (normalised to `/` separators)
+ * @param pattern - A single rsync exclude pattern
+ * @returns True if the string matches the pattern
+ */
+function matchGlob(str: string, pattern: string): boolean {
+	let regexStr = '^';
+	let i = 0;
+	while (i < pattern.length) {
+		const ch = pattern[i];
+		if (ch === '*') {
+			if (pattern[i + 1] === '*') {
+				// `**` matches anything, including `/`
+				if (pattern[i + 2] === '/') {
+					// `**/` — optionally matches a directory prefix
+					regexStr += '(.*/)?';
+					i += 3;
+				} else {
+					regexStr += '.*';
+					i += 2;
+				}
+			} else {
+				// `*` matches anything except `/`
+				regexStr += '[^/]*';
+				i++;
+			}
+		} else if (ch === '?') {
+			regexStr += '[^/]';
+			i++;
+		} else if (ch === '[') {
+			// Character class — pass through (valid regex)
+			const end = pattern.indexOf(']', i);
+			if (end !== -1) {
+				regexStr += pattern.substring(i, end + 1);
+				i = end + 1;
+			} else {
+				regexStr += '\\[';
+				i++;
+			}
+		} else if ('.+^${}()|\\'.includes(ch)) {
+			regexStr += '\\' + ch;
+			i++;
+		} else {
+			regexStr += ch;
+			i++;
+		}
+	}
+	regexStr += '$';
+
+	try {
+		return new RegExp(regexStr).test(str);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Determine whether a file (identified by its workspace-relative path) matches
+ * any of the rsync exclude patterns.
+ *
+ * Models rsync's exclusion semantics:
+ * - Patterns containing `/` (after normalisation) are matched against the
+ *   **full relative path**.
+ * - Patterns without `/` are matched against **each path segment**.  This
+ *   handles both file-name patterns (`*.log`) and directory-name patterns
+ *   (`node_modules`, `.venv`) — when rsync encounters a directory whose name
+ *   matches an exclude pattern it skips the entire subtree.
+ * - A trailing `/` on a pattern restricts it to directories only.
+ *
+ * @param relativePath - File path relative to workspace root (may contain
+ *   backslashes on Windows; normalised internally)
+ * @param excludePatterns - Array of rsync exclude patterns from config
+ * @returns True if the file should be excluded from syncing
+ */
+function isExcluded(relativePath: string, excludePatterns: string[]): boolean {
+	if (excludePatterns.length === 0) {
+		return false;
+	}
+
+	// Normalise path separators for consistent matching
+	const normalised = relativePath.replace(/\\/g, '/');
+	const segments = normalised.split('/');
+
+	return excludePatterns.some(pattern => {
+		// Normalise the pattern
+		let p = pattern;
+
+		// Trailing `/` means directories only
+		const dirOnly = p.endsWith('/');
+		if (dirOnly) {
+			p = p.slice(0, -1);
+		}
+
+		// Leading `/` anchors to the transfer root — strip it since we
+		// always match from the workspace root.
+		if (p.startsWith('/')) {
+			p = p.slice(1);
+		}
+
+		const hasSlash = p.includes('/');
+
+		if (hasSlash) {
+			// Pattern with `/`: match against the full path
+			return matchGlob(normalised, p);
+		}
+
+		if (dirOnly) {
+			// Bare pattern ending in `/` (e.g. "dist/"): only match
+			// directory segments, not the file name.
+			return segments.slice(0, -1).some(seg => matchGlob(seg, p));
+		}
+
+		// Pattern without `/`: match against every path segment so a
+		// directory pattern like `node_modules` catches files inside it.
+		return segments.some(seg => matchGlob(seg, p));
+	});
 }
