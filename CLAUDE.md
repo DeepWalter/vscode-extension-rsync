@@ -72,7 +72,7 @@ Users must set at minimum `rsync.remoteHost` and `rsync.remotePath` in their VS 
 |`rsync.remotePath`|`""`|Destination path on remote|
 |`rsync.remoteName`|`""`|Optional display name for the remote; shown in the status bar as "rsync to *name*"|
 |`rsync.rsyncPath`|`"rsync"`|Path to rsync binary|
-|`rsync.exclude`|`[".git", "node_modules", "out", ".vscode-test"]`|Patterns passed to `--exclude`|
+|`rsync.exclude`|`[".vscode", ".idea", ".DS_Store", "node_modules", ".vscode-test", "**/__pycache__/", "*.py[co]", ".venv", "venv", ".env", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "dist", "build", "*.egg-info", "*.log"]`|Patterns passed to `--exclude`|
 |`rsync.extraOptions`|`["-az", "--delete"]`|Extra rsync flags|
 |`rsync.syncOnSave`|`false`|Automatically sync the current file on save|
 |`rsync.syncOnSaveDelay`|`500`|Debounce delay in ms before syncing on save|

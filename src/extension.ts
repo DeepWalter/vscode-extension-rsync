@@ -306,8 +306,8 @@ async function syncCurrentFile() {
  * `rsync.syncProject` command handler.
  *
  * Syncs the entire workspace folder to the remote host. Uses the exclusion
- * patterns from the `rsync.exclude` setting (default: .git, node_modules, out,
- * .vscode-test) to skip files that shouldn't be transferred.
+ * patterns from the `rsync.exclude` setting to skip files that shouldn't be
+ * transferred.
  *
  * Validation (each step shows an error notification and aborts on failure):
  * 1. Required settings are configured (remoteHost, remotePath)
@@ -472,11 +472,11 @@ async function promptAdvancedOptions(config: vscode.WorkspaceConfiguration) {
 	}
 
 	// exclude patterns (comma-separated)
-	const curExclude = config.get<string[]>('exclude', ['.git', 'node_modules', 'out', '.vscode-test']).join(', ');
+	const curExclude = config.get<string[]>('exclude', []).join(', ');
 	const excludeInput = await vscode.window.showInputBox({
 		title: 'rsync: Advanced — Exclude Patterns',
-		prompt: 'Exclusion patterns (comma-separated, e.g., .git, node_modules)',
-		placeHolder: '.git, node_modules, out, .vscode-test',
+		prompt: 'Exclusion patterns (comma-separated, e.g., node_modules, .venv)',
+		placeHolder: 'e.g., .vscode, node_modules, .venv, .DS_Store, dist, build, *.log',
 		value: curExclude,
 	});
 	if (excludeInput !== undefined) {

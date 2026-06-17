@@ -1,6 +1,6 @@
 {
   "name": "rsync",
-  "displayName": "rsync",
+  "displayName": "Remote Sync",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -63,10 +63,24 @@
             "type": "string"
           },
           "default": [
-            ".git",
+            ".vscode",
+            ".idea",
+            ".DS_Store",
             "node_modules",
-            "out",
-            ".vscode-test"
+            ".vscode-test",
+            "**/__pycache__/",
+            "*.py[co]",
+            ".venv",
+            "venv",
+            ".env",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            ".tox",
+            "dist",
+            "build",
+            "*.egg-info",
+            "*.log"
           ],
           "description": "Exclusion patterns passed to --exclude"
         },
