@@ -32,6 +32,63 @@ import * as vscode from 'vscode';
 // We use it to compute relative paths and join path segments portably.
 import * as path from 'path';
 
+// ---- Status bar ----
+
+/** The status bar item that reflects the current sync state. */
+let statusBarItem: vscode.StatusBarItem;
+/** Timeout handle for reverting the success indicator back to idle. */
+let successTimeout: NodeJS.Timeout | undefined;
+
+/**
+ * Read the display name for the remote from configuration.
+ *
+ * Uses `rsync.remoteName` if set, otherwise falls back to `rsync.remoteHost`.
+ * Returns 'rsync' if neither is configured.
+ */
+function getRemoteDisplayName(): string {
+	const config = vscode.workspace.getConfiguration('rsync');
+	const remoteName = config.get<string>('remoteName', '').trim();
+	if (remoteName) {
+		return `rsync to ${remoteName}`;
+	}
+	const remoteHost = config.get<string>('remoteHost', '').trim();
+	if (remoteHost) {
+		return `rsync to ${remoteHost}`;
+	}
+	return 'rsync';
+}
+
+function setSyncStatus(state: 'idle' | 'running' | 'success' | 'error'): void {
+	if (successTimeout) {
+		clearTimeout(successTimeout);
+		successTimeout = undefined;
+	}
+	const name = getRemoteDisplayName();
+	switch (state) {
+		case 'idle':
+			statusBarItem.text = `$(sync) ${name}`;
+			statusBarItem.tooltip = `${name}: Ready`;
+			statusBarItem.color = undefined;
+			break;
+		case 'running':
+			statusBarItem.text = `$(sync~spin) ${name}`;
+			statusBarItem.tooltip = `${name}: Syncing...`;
+			statusBarItem.color = undefined;
+			break;
+		case 'success':
+			statusBarItem.text = `$(pass) ${name}`;
+			statusBarItem.tooltip = `${name}: Sync completed`;
+			statusBarItem.color = '#73c991';
+			successTimeout = setTimeout(() => setSyncStatus('idle'), 3000);
+			break;
+		case 'error':
+			statusBarItem.text = `$(error) ${name}`;
+			statusBarItem.tooltip = `${name}: Sync failed — click to retry`;
+			statusBarItem.color = '#f14c4c';
+			break;
+	}
+}
+
 /**
  * Called by VS Code when the extension is activated.
  *
@@ -39,26 +96,36 @@ import * as path from 'path';
  *   is automatically disposed when the extension is deactivated.
  */
 export function activate(context: vscode.ExtensionContext) {
-	/**
-	 * Listen for task completion events from VS Code's task system.
-	 *
-	 * `onDidEndTaskProcess` fires whenever ANY task finishes. We filter by
-	 * `task.definition.type === 'rsync'` to only react to our own tasks.
-	 *
-	 * The event payload (`e`) includes:
-	 *   - `e.execution.task` — the vscode.Task that ran
-	 *   - `e.exitCode`      — the process exit code (0 = success)
-	 */
-	const disposable = vscode.tasks.onDidEndTaskProcess((e) => {
-		// Only handle tasks created by this extension (see createRsyncTask below)
+	// ---- Status bar item ----
+	// Placed on the left side, next to the Problems'
+	// Warnings indicators.
+	statusBarItem = vscode.window.createStatusBarItem(
+		vscode.StatusBarAlignment.Left,
+		10,
+	);
+	statusBarItem.command = 'rsync.syncCurrentFile';
+	setSyncStatus('idle');
+	statusBarItem.show();
+
+	// ---- Task lifecycle listeners ----
+	// `onDidStartTask` fires when task execution begins — we use it to
+	// flip the status bar into "running" state.
+	const startListener = vscode.tasks.onDidStartTask((e) => {
+		if (e.execution.task.definition.type === 'rsync') {
+			setSyncStatus('running');
+		}
+	});
+
+	// `onDidEndTaskProcess` fires when the shell process exits.
+	const endListener = vscode.tasks.onDidEndTaskProcess((e) => {
+		// Only handle tasks created by this extension
 		if (e.execution.task.definition.type !== 'rsync') {
 			return;
 		}
 		if (e.exitCode === 0) {
-			vscode.window.showInformationMessage(
-				`rsync: "${e.execution.task.name}" completed successfully.`,
-			);
+			setSyncStatus('success');
 		} else {
+			setSyncStatus('error');
 			vscode.window.showErrorMessage(
 				`rsync: "${e.execution.task.name}" failed with exit code ${e.exitCode}. See terminal for details.`,
 			);
@@ -113,7 +180,9 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(
-		disposable,
+		statusBarItem,
+		startListener,
+		endListener,
 		vscode.Disposable.from(
 			onSaveListener,
 			{ dispose: () => { for (const t of saveTimeouts.values()) { clearTimeout(t); } } },
@@ -362,6 +431,18 @@ async function configWorkspace() {
  * workspace configuration.
  */
 async function promptAdvancedOptions(config: vscode.WorkspaceConfiguration) {
+	// remoteName
+	const curName = config.get<string>('remoteName', '');
+	const remoteName = await vscode.window.showInputBox({
+		title: 'rsync: Advanced — Remote Display Name',
+		prompt: 'Display name shown in the status bar (e.g., production)',
+		placeHolder: 'production',
+		value: curName,
+	});
+	if (remoteName !== undefined) {
+		await config.update('remoteName', remoteName.trim(), vscode.ConfigurationTarget.Workspace);
+	}
+
 	// rsyncPath
 	const curRsyncPath = config.get<string>('rsyncPath', 'rsync');
 	const rsyncPath = await vscode.window.showInputBox({

@@ -42,6 +42,11 @@
           "default": "",
           "description": "Remote host in rsync format (e.g., user@host)"
         },
+        "rsync.remoteName": {
+          "type": "string",
+          "default": "",
+          "description": "Optional display name for the remote host. If set, the status bar shows \"rsync to <name>\" instead of the raw host."
+        },
         "rsync.remotePath": {
           "type": "string",
           "default": "",
