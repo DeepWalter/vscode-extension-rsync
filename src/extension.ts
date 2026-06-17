@@ -75,8 +75,14 @@ export function activate(context: vscode.ExtensionContext) {
 	 * The command IDs ("rsync.syncCurrentFile", "rsync.syncProject") MUST match
 	 * the `contributes.commands` entries in package.json exactly.
 	 */
+	const taskProvider = vscode.tasks.registerTaskProvider('rsync', {
+		provideTasks: () => [],
+		resolveTask: (task: vscode.Task): vscode.Task | undefined => task,
+	});
+
 	context.subscriptions.push(
 		disposable,
+		taskProvider,
 		vscode.commands.registerCommand('rsync.syncCurrentFile', syncCurrentFile),
 		vscode.commands.registerCommand('rsync.syncProject', syncProject),
 	);
@@ -86,7 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
  * Called by VS Code when the extension is deactivated.
  * No manual cleanup needed — `context.subscriptions` takes care of everything.
  */
-export function deactivate() {}
+export function deactivate() { }
 
 // ---- Command implementations ----
 
@@ -334,14 +340,17 @@ function createRsyncTask(name: string, args: string[]): vscode.Task {
 	const config = vscode.workspace.getConfiguration('rsync');
 	const rsyncPath = config.get<string>('rsyncPath', 'rsync');
 
+	// Create a standard Shell execution
+	const execution = new vscode.ShellExecution(rsyncPath, args);
+
 	const task = new vscode.Task(
-		// TaskDefinition — the `type` field is what we check in onDidEndTaskProcess
+		// Custom 'rsync' type — backed by taskDefinitions in package.json
+		// and a TaskProvider registered in activate().
 		{ type: 'rsync' },
 		vscode.TaskScope.Workspace,
 		name,
 		'rsync', // source — identifies which extension created this task
-		// ShellExecution: equivalent to running `rsyncPath arg1 arg2 ...` in a terminal
-		new vscode.ShellExecution(rsyncPath, args),
+		execution
 	);
 
 	// Control how the task's terminal behaves

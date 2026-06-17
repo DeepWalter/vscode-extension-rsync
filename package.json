@@ -11,6 +11,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "taskDefinitions": [
+      {
+        "type": "rsync",
+        "properties": {}
+      }
+    ],
     "commands": [
       {
         "command": "rsync.syncCurrentFile",
