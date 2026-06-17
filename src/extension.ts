@@ -69,15 +69,32 @@ export function activate(context: vscode.ExtensionContext) {
 	 * Auto-sync on save: when the user saves a document and `rsync.syncOnSave`
 	 * is enabled, sync that file to the remote host automatically.
 	 *
+	 * A debounce timer (`rsync.syncOnSaveDelay`, default 500 ms) ensures
+	 * rsync runs after all save-triggered activity has settled — formatters,
+	 * code actions, and other extensions that may trigger additional saves.
+	 *
 	 * Validation is silent — no error popups on every save. If config is
 	 * missing the user will notice when they manually run a sync command.
 	 */
+	const saveTimeouts = new Map<string, NodeJS.Timeout>();
+
 	const onSaveListener = vscode.workspace.onDidSaveTextDocument((document) => {
 		const config = vscode.workspace.getConfiguration('rsync');
 		if (!config.get<boolean>('syncOnSave', false)) {
 			return;
 		}
-		syncFile(document);
+
+		const key = document.uri.toString();
+		const existing = saveTimeouts.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+
+		const delay = config.get<number>('syncOnSaveDelay', 500);
+		saveTimeouts.set(key, setTimeout(() => {
+			saveTimeouts.delete(key);
+			syncFile(document);
+		}, delay));
 	});
 
 	/**
@@ -97,7 +114,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		disposable,
-		onSaveListener,
+		vscode.Disposable.from(
+			onSaveListener,
+			{ dispose: () => { for (const t of saveTimeouts.values()) { clearTimeout(t); } } },
+		),
 		taskProvider,
 		vscode.commands.registerCommand('rsync.syncCurrentFile', syncCurrentFile),
 		vscode.commands.registerCommand('rsync.syncProject', syncProject),

@@ -80,6 +80,12 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically sync the current file to the remote when it is saved"
+        },
+        "rsync.syncOnSaveDelay": {
+          "type": "number",
+          "default": 500,
+          "minimum": 0,
+          "description": "Delay in milliseconds before syncing on save. The timer resets on each save, so rapid saves (e.g., from formatters or other extensions) will only trigger one sync. Set to 0 for immediate sync."
         }
       }
     }
