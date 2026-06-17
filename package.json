@@ -72,6 +72,11 @@
             "--delete"
           ],
           "description": "Extra rsync flags"
+        },
+        "rsync.syncOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically sync the current file to the remote when it is saved"
         }
       }
     }

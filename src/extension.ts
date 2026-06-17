@@ -66,6 +66,21 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	/**
+	 * Auto-sync on save: when the user saves a document and `rsync.syncOnSave`
+	 * is enabled, sync that file to the remote host automatically.
+	 *
+	 * Validation is silent — no error popups on every save. If config is
+	 * missing the user will notice when they manually run a sync command.
+	 */
+	const onSaveListener = vscode.workspace.onDidSaveTextDocument((document) => {
+		const config = vscode.workspace.getConfiguration('rsync');
+		if (!config.get<boolean>('syncOnSave', false)) {
+			return;
+		}
+		syncFile(document);
+	});
+
+	/**
 	 * Register our two commands with VS Code.
 	 *
 	 * `vscode.commands.registerCommand(commandId, handler)` returns a Disposable.
@@ -82,6 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		disposable,
+		onSaveListener,
 		taskProvider,
 		vscode.commands.registerCommand('rsync.syncCurrentFile', syncCurrentFile),
 		vscode.commands.registerCommand('rsync.syncProject', syncProject),
@@ -96,6 +112,56 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() { }
 
 // ---- Command implementations ----
+
+/**
+ * Core implementation shared by the `rsync.syncCurrentFile` command and the
+ * `syncOnSave` listener.
+ *
+ * Syncs a single document to the remote host, preserving its directory
+ * structure relative to the workspace root.
+ *
+ * Unlike `syncCurrentFile`, this function validates silently — it returns
+ * early without showing error notifications. This makes it safe to call
+ * from automated triggers like `onDidSaveTextDocument` without spamming
+ * the user with popups on every save.
+ *
+ * @param document - The text document to sync
+ */
+async function syncFile(document: vscode.TextDocument) {
+	// Validate required configuration silently
+	const cfg = validateConfig();
+	if (!cfg) {
+		return;
+	}
+
+	const workspaceRoot = getWorkspaceRoot();
+	if (!workspaceRoot) {
+		return;
+	}
+
+	const filePath = document.uri.fsPath;
+
+	// Compute the file's path relative to the workspace root.
+	const relativePath = path.relative(workspaceRoot, filePath);
+
+	// If the relative path starts with "..", the file is outside the workspace
+	if (relativePath.startsWith('..')) {
+		return;
+	}
+
+	// Extract the directory portion of the relative path so rsync places
+	// the file in the correct subdirectory on the remote.
+	const destDir = path.dirname(relativePath);
+
+	// Construct the rsync destination with trailing `/`
+	const dest = `${cfg.remoteHost}:${path.join(cfg.remotePath, destDir)}/`;
+
+	// Build the argument list: extraOptions + source file + destination
+	const args = [...cfg.extraOptions, filePath, dest];
+
+	const task = createRsyncTask('Sync Current File', args);
+	await vscode.tasks.executeTask(task);
+}
 
 /**
  * `rsync.syncCurrentFile` command handler.
@@ -113,62 +179,38 @@ export function deactivate() { }
  * 3. An editor is active (a file is open)
  * 4. The file is inside the workspace
  *
- * @async — uses `await` to wait for task execution to start
+ * Delegates to `syncFile()` for the actual sync logic.
  */
 async function syncCurrentFile() {
-	// Validate required configuration (remoteHost, remotePath)
+	// Validate required configuration (remoteHost, remotePath) — loud, with
+	// error notifications so the user knows why the command didn't work.
 	const cfg = validateConfig();
 	if (!cfg) {
 		return;
 	}
 
-	// Ensure a workspace folder is open (we need it to compute the relative path)
+	// Ensure a workspace folder is open
 	const workspaceRoot = getWorkspaceRoot();
 	if (!workspaceRoot) {
 		return;
 	}
 
-	// Get the currently focused text editor. This is null if no file is open
-	// (e.g., the user is viewing the Welcome page or Settings UI).
+	// Get the currently focused text editor.
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
 		vscode.window.showErrorMessage('rsync: No active editor.');
 		return;
 	}
 
-	// `document.uri.fsPath` gives us the absolute file path on disk.
-	// (On Windows this uses backslashes; on macOS/Linux, forward slashes.)
+	// Check that the file is inside the workspace before delegating
 	const filePath = editor.document.uri.fsPath;
-
-	// Compute the file's path relative to the workspace root.
-	// e.g., workspaceRoot = "/project", filePath = "/project/src/foo.ts"
-	//       → relativePath = "src/foo.ts"
 	const relativePath = path.relative(workspaceRoot, filePath);
-
-	// If the relative path starts with "..", the file is outside the workspace
-	// (e.g., opened via "File > Open…" without being in the workspace tree).
 	if (relativePath.startsWith('..')) {
 		vscode.window.showErrorMessage('rsync: The active file is outside the workspace.');
 		return;
 	}
 
-	// Extract the directory portion of the relative path so rsync places the file
-	// in the correct subdirectory on the remote.
-	// e.g., "src/foo.ts" → destDir = "src"
-	const destDir = path.dirname(relativePath);
-
-	// Construct the rsync destination: user@host:/remote/path/src/
-	// `path.join` handles the separator between remotePath and destDir portably.
-	// Trailing `/` tells rsync the destination is a directory.
-	const dest = `${cfg.remoteHost}:${path.join(cfg.remotePath, destDir)}/`;
-
-	// Build the full argument list: [...extraOptions, sourceFile, destination]
-	// The spread operator `...cfg.extraOptions` expands the array in place.
-	// e.g., if extraOptions = ["-az", "--delete"], then args = ["-az", "--delete", "/project/src/foo.ts", "user@host:/remote/src/"]
-	const args = [...cfg.extraOptions, filePath, dest];
-
-	const task = createRsyncTask('Sync Current File', args);
-	await vscode.tasks.executeTask(task);
+	await syncFile(editor.document);
 }
 
 /**
@@ -342,6 +384,19 @@ async function promptAdvancedOptions(config: vscode.WorkspaceConfiguration) {
 			.map(s => s.trim())
 			.filter(s => s.length > 0);
 		await config.update('exclude', exclude, vscode.ConfigurationTarget.Workspace);
+	}
+
+	// syncOnSave
+	const curSyncOnSave = config.get<boolean>('syncOnSave', false);
+	const syncOnSaveChoice = await vscode.window.showQuickPick(
+		['Yes', 'No'],
+		{
+			title: 'rsync: Advanced — Sync on Save',
+			placeHolder: curSyncOnSave ? 'Yes' : 'No',
+		},
+	);
+	if (syncOnSaveChoice !== undefined) {
+		await config.update('syncOnSave', syncOnSaveChoice === 'Yes', vscode.ConfigurationTarget.Workspace);
 	}
 }
 
