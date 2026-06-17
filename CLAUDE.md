@@ -52,11 +52,14 @@ The item displays "rsync to *name*" where *name* comes from `rsync.remoteName` (
 |---|---|
 |`activate()`|Creates the status bar item, registers task lifecycle listeners (`onDidStartTask`/`onDidEndTaskProcess`), auto-save listener, task provider, and commands|
 |`syncCurrentFile()`|Handler for syncing the active editor file (validates, then delegates to `syncFile`)|
-|`syncFile(document)`|Core sync logic for a single document — used by both `syncCurrentFile` and the `syncOnSave` listener; validates silently|
+|`syncFile(document)`|Core sync logic for a single document — used by both `syncCurrentFile` and the `syncOnSave` listener; validates silently and skips files matching `rsync.exclude` patterns via `isExcluded`|
 |`syncProject()`|Handler for syncing the entire workspace|
 |`validateConfig()`|Reads and validates required settings; returns `null` with a user notification if missing|
 |`getWorkspaceRoot()`|Returns `workspaceFolders[0].uri.fsPath` or `null` if no folder is open|
 |`createRsyncTask(name, args)`|Builds a `vscode.Task` with `ShellExecution` and `presentationOptions`|
+|`escapeShellGlob(pattern)`|Escapes shell glob metacharacters (`*?[]`) for safe `--exclude` passthrough in `syncProject`|
+|`matchGlob(str, pattern)`|Converts rsync-style glob patterns (`**`, `*`, `?`, `[...]`) to regex for matching|
+|`isExcluded(relativePath, excludePatterns)`|Tests a file path against `rsync.exclude` patterns; used by `syncFile` to skip excluded files on save|
 |`configWorkspace()`|Handler for interactive workspace configuration (`rsync.config` command)|
 |`promptAdvancedOptions(config)`|Prompts for optional settings: remoteName, rsyncPath, extraOptions, exclude patterns, syncOnSave|
 |`getRemoteDisplayName()`|Reads `rsync.remoteName` or falls back to `rsync.remoteHost`; returns full label like "rsync to production"|
