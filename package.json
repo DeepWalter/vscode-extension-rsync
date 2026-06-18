@@ -1,14 +1,37 @@
 {
   "name": "rsync",
   "displayName": "Remote Sync",
-  "description": "",
+  "description": "Sync files to a remote host via rsync",
+  "private": true,
+  "publisher": "deepwalter",
+  "license": "MIT",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DeepWalter/vscode-extension-rsync"
+  },
+  "bugs": {
+    "url": "https://github.com/DeepWalter/vscode-extension-rsync/issues"
+  },
+  "homepage": "https://github.com/DeepWalter/vscode-extension-rsync#readme",
+  "icon": "icon.png",
+  "keywords": [
+    "rsync",
+    "sync",
+    "remote",
+    "deploy",
+    "upload"
+  ],
   "engines": {
     "vscode": "^1.120.0"
   },
   "categories": [
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "main": "./out/extension.js",
   "activationEvents": [
     "onStartupFinished"
@@ -40,22 +63,26 @@
         "rsync.remoteHost": {
           "type": "string",
           "default": "",
-          "description": "Remote host in rsync format (e.g., user@host)"
+          "scope": "resource",
+          "markdownDescription": "Remote host in rsync format (e.g., `user@host`)"
         },
         "rsync.remoteName": {
           "type": "string",
           "default": "",
-          "description": "Optional display name for the remote host. If set, the status bar shows \"rsync to <name>\" instead of the raw host."
+          "scope": "resource",
+          "markdownDescription": "Optional display name for the remote host. If set, the status bar shows \"rsync to \\<name\\>\" instead of the raw host."
         },
         "rsync.remotePath": {
           "type": "string",
           "default": "",
-          "description": "Destination path on remote (e.g., /home/user/project/)"
+          "scope": "resource",
+          "markdownDescription": "Destination path on remote (e.g., `/home/user/project/`)"
         },
         "rsync.rsyncPath": {
           "type": "string",
           "default": "rsync",
-          "description": "Path to the rsync binary"
+          "scope": "machine-overridable",
+          "markdownDescription": "Path to the `rsync` binary"
         },
         "rsync.exclude": {
           "type": "array",
@@ -82,7 +109,8 @@
             "*.egg-info",
             "*.log"
           ],
-          "description": "Exclusion patterns passed to --exclude"
+          "scope": "resource",
+          "markdownDescription": "Exclusion patterns passed to `--exclude`"
         },
         "rsync.extraOptions": {
           "type": "array",
@@ -93,18 +121,21 @@
             "-az",
             "--delete"
           ],
-          "description": "Extra rsync flags"
+          "scope": "resource",
+          "markdownDescription": "Extra rsync flags (e.g., `-az`, `--delete`)"
         },
         "rsync.syncOnSave": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically sync the current file to the remote when it is saved"
+          "scope": "resource",
+          "markdownDescription": "Automatically sync the current file to the remote when it is saved"
         },
         "rsync.syncOnSaveDelay": {
           "type": "number",
           "default": 500,
           "minimum": 0,
-          "description": "Delay in milliseconds before syncing on save. The timer resets on each save, so rapid saves (e.g., from formatters or other extensions) will only trigger one sync. Set to 0 for immediate sync."
+          "scope": "resource",
+          "markdownDescription": "Delay in milliseconds before syncing on save. The timer resets on each save, so rapid saves (e.g., from formatters or other extensions) will only trigger one sync. Set to `0` for immediate sync."
         }
       }
     }
