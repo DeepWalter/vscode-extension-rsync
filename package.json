@@ -14,7 +14,7 @@
     "url": "https://github.com/DeepWalter/vscode-extension-rsync/issues"
   },
   "homepage": "https://github.com/DeepWalter/vscode-extension-rsync#readme",
-  "icon": "icon.png",
+  "icon": "images/icon.png",
   "keywords": [
     "rsync",
     "sync",
