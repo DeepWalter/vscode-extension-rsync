@@ -3,5 +3,5 @@ dist
 node_modules
 .vscode-test/
 *.vsix
-# Ignore the local VS Code configuration folder
-.vscode/
+# Ignore user-specific VS Code workspace settings
+.vscode/settings.json
